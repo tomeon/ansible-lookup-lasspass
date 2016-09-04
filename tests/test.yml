@@ -1,0 +1,7 @@
+---
+- hosts: all
+  roles:
+    - role: '{{ [playbook_dir, ".."] | join("/") | realpath | basename }}'
+  tasks:
+    - debug:
+        msg: '{{ lookup("lastpass", "nzbs.in", field="api_key", basic_regexp=True, sync="now") }}'
