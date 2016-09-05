@@ -12,6 +12,9 @@ __metaclass__ = type
 
 import distutils.spawn
 import subprocess
+import yaml
+
+from StringIO import StringIO
 
 from ansible.errors import AnsibleError
 from ansible.plugins.lookup import LookupBase
@@ -25,8 +28,7 @@ except ImportError:
 
 class LastPass(object):
 
-    NAMED_FIELDS = frozenset(('all', 'username', 'password', 'url', 'notes',
-                             'id', 'name',),)
+    NAMED_FIELDS = frozenset(('username', 'password', 'url', 'notes', 'id', 'name',),)
 
     def __init__(self, command=None):
         if command is not None:
@@ -42,7 +44,7 @@ class LastPass(object):
     def popen_command(self, action, args=[]):
         cmd = self.build_command(action, args=args)
 
-        display.vvv('EXEC {0}'.format(' '.join(cmd)))
+        display.debug('EXEC {0}'.format(' '.join(cmd)))
 
         return subprocess.Popen(cmd, stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -53,50 +55,78 @@ class LastPass(object):
         return (p.returncode, stdout, stderr)
 
     def status(self):
-        return self.run_command('status')
+        returncode, stdout, stderr = self.run_command('status')
+
+        if returncode != 0:
+            raise AnsibleError('lastpass status error: {0}'.format(stdout.rstrip()))
+
+        return stdout.rstrip()
+
 
     def show(self, target, **kwargs):
         ''' TODO cache arguments '''
+        as_dict         = kwargs.get('as_dict', False)
+        basic_regexp    = kwargs.get('basic_regexp', False)
+        expand_multi    = kwargs.get('expand_multi', False)
+        field           = kwargs.get('field', None)
+        fixed_string    = kwargs.get('fixed_string', False)
+        sync            = kwargs.get('sync', None)
+
         local_args = []
 
-        sync = kwargs.get('sync', None)
         if sync is not None:
             local_args.append('--sync={0}'.format(sync))
 
-        if kwargs.get('expand_multi', False):
+        if expand_multi:
             local_args.append('--expand-multi')
 
-        field = kwargs.get('field', 'username')
-        if field in self.NAMED_FIELDS:
-            local_args.append('--{0}'.format(field))
-        else:
-            local_args.append('--field={0}'.format(field))
+        if as_dict:
+            local_args.append('--all')
+        elif field is not None:
+            if field == 'all':
+                raise AnsibleError("Use as_dict=True instead of field='all'")
 
-        if kwargs.get('basic_regexp', False):
+            if field in self.NAMED_FIELDS:
+                local_args.append('--{0}'.format(field))
+            else:
+                local_args.append('--field={0}'.format(field))
+        else:
+            raise AnsibleError("Please provide a value for field= or use as_dict=True")
+
+        if basic_regexp:
             local_args.append('--basic-regexp')
-        elif kwargs.get('fixed_string', False):
+        elif fixed_string:
             local_args.append('--fixed-strings')
 
         local_args.append(target)
 
-        return self.run_command('show', local_args)
+        returncode, stdout, stderr = self.run_command('show', local_args)
+
+        if returncode != 0:
+            raise AnsibleError('lastpass error retrieving data for {0}: {1}'.format(target, stderr.rstrip()))
+
+        stdout_io = StringIO(stdout)
+        firstline = stdout_io.readline()
+
+        if firstline.startswith('Multiple matches'):
+            raise AnsibleError('lastpass found multiple matches for {0}'.format(target))
+        elif as_dict:
+            parsed = yaml.safe_load(stdout_io)
+            ret = [dict(key=k.lower(), value=v) for k, v in parsed.iteritems()]
+        else:
+            ret = firstline.rstrip()
+
+        stdout_io.close()
+
+        return ret
 
 
 class LookupModule(LookupBase):
 
     def run(self, terms, variables=None, **kwargs):
-        lp = LastPass(command=kwargs.pop('lastpass_command', None))
+        lp = LastPass()
 
-        returncode, stdout, stderr = lp.status()
-        if returncode != 0:
-            raise AnsibleError('lastpass status error: {0}'.format(stdout.rstrip()))
+        status = lp.status()
+        display.debug('LASTPASS STATUS {0}'.format(status))
 
-        ret = []
-        for term in terms:
-            returncode, stdout, stderr = lp.show(term, **kwargs)
-            if returncode != 0:
-                raise AnsibleError('lastpass error retrieving data for {0}: {1}'.format(term, stderr.rstrip()))
-
-            ret.append(stdout.rstrip())
-
-        return ret
+        return [lp.show(term, **kwargs) for term in terms]

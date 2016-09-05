@@ -3,5 +3,6 @@
   roles:
     - role: '{{ [playbook_dir, ".."] | join("/") | realpath | basename }}'
   tasks:
-    - debug:
-        msg: '{{ lookup("lastpass", "nzbs.in", field="api_key", basic_regexp=True, sync="now") }}'
+    - name: look up Docker Hub username
+      debug:
+        msg: '{{ lookup("lastpass", "Docker.*Hub", field="username", basic_regexp=True, sync="now") }}'
