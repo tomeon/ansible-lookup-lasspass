@@ -62,7 +62,6 @@ class LastPass(object):
 
         return stdout.rstrip()
 
-
     def show(self, target, **kwargs):
         ''' TODO cache arguments '''
         as_dict         = kwargs.get('as_dict', False)
@@ -70,6 +69,7 @@ class LastPass(object):
         expand_multi    = kwargs.get('expand_multi', False)
         field           = kwargs.get('field', None)
         fixed_string    = kwargs.get('fixed_string', False)
+        pairs           = kwargs.get('merged', False)
         sync            = kwargs.get('sync', None)
 
         local_args = []
@@ -112,7 +112,11 @@ class LastPass(object):
             raise AnsibleError('lastpass found multiple matches for {0}'.format(target))
         elif as_dict:
             parsed = yaml.safe_load(stdout_io)
-            ret = [dict(key=k.lower(), value=v) for k, v in parsed.iteritems()]
+
+            if pairs:
+                ret = [dict(key=k.lower(), value=v) for k, v in parsed.iteritems()]
+            else:
+                ret = {k.lower(): v for k, v in parsed.iteritems()}
         else:
             ret = firstline.rstrip()
 
