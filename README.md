@@ -18,8 +18,13 @@ that you are not currently logged in.
 
 ### Options
 
-- `target`: A :class:`str` to use as the basis of the lookup.
-    Whether this field represents a LastPass ID, or the login name,
+Each lookup must provide as its second argument (after `"lastpass"`) that
+represents either the unique ID or unique name of an entry in your LastPass
+Vault.  For instance, if you wanted to lookup up data related to your GitHub
+account, you might provide the argument `https://github.com` if you are using
+the `fixed_strings` option, or just `github.com` if your are using the
+`basic_regexp` option.  *NOTE* this plugin raises an exception if the search
+string matches more than one entry in your LastPass Vault.
 
 - `basic_regexp`: When true, indicates that the string to match against is a
   regular expression.
@@ -114,9 +119,9 @@ ok: [localhost] => {
 ## Caveats
 
 At present, the `lpass show` command that underpins this plugin cannot be
-configured to display results in standard serialization format like JSON or
-YAML.  Instead, it uses an ad-hoc style of one `key: value` pair per line.
-It would be possible to load this as YAML, except that keys and values aren't
+configured to display results in a standard serialization format like JSON or
+YAML.  Instead, it uses an ad-hoc style of one `key: value` pair per line.  It
+would be possible to load this as YAML, except that keys and values aren't
 quoted, so parsing breaks if any YAML metacharacters appear in either.
 
 For now, this plugin employs a simplistic parser that just splits each line on
