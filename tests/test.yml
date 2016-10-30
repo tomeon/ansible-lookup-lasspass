@@ -6,3 +6,9 @@
     - name: look up Docker Hub username
       debug:
         msg: '{{ lookup("lastpass", "Docker.*Hub", field="username", basic_regexp=True, sync="now") }}'
+    - name: look up all fields associated with Docker Hub account
+      debug:
+        msg: '{{ lookup("lastpass", "Docker.*Hub", basic_regexp=True, as_dict=True) }}'
+    - name: look up all fields associated with Docker Hub account as key/value hashes
+      debug:
+        msg: '{{ lookup("lastpass", "Docker.*Hub", field="username", basic_regexp=True, pairs=True, as_dict=True) }}'
