@@ -93,7 +93,7 @@ class LastPass(object):
         :kwarg pairs: When :kwarg as_dict: is true, returns all fields as a
             list of hashes containing the entries ``key`` and ``value``,
             much like the ``with_dict`` loop type.
-        :kwarg sync: Options are:
+        :kwarg sync: Synchronize with LastPass' servers.  Options are:
             :auto:
             :now:
             :no:
