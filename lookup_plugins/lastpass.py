@@ -63,13 +63,61 @@ class LastPass(object):
         return stdout.rstrip()
 
     def show(self, target, **kwargs):
-        ''' TODO cache arguments '''
-        as_dict         = kwargs.get('as_dict', False)
+        ''' Show a field or set of fields for a given lpass lookup.
+            Corresponds to the ``show`` operation of the ``lpass`` utility.
+
+        :arg target: A :class:`str` to use as the basis of the lookup.
+            This must correspond either to the unique ID or unique name
+            associated with the LastPass entry.
+        :kwarg basic_regexp: When true, indicates that
+            :arg target: is to be treated as a regular expression.
+        :kwarg fixed_strings: When true, indicates that :arg target: is to
+            be treated as a literal string.
+        :kwarg expand_multi: If multiple accounts match :arg target:,
+            expand the result set for all of them.
+        :kwarg field: Which field to retrieve.  Any field associated with
+            an account is valid here, so if you have created a custom field for
+            an account you may specify it here.  Beware: field names other
+            than built-in options (i.e., those that correspond to CLI flags
+            like ``--password``) are case-sensitive.  Built-in choices are:
+
+            :username: The ``Username`` field associated with an account.
+            :password: The ``Password`` field associated with an account.
+            :url: The ``URL`` field associated with an account.
+            :notes: The ``notes`` field associated with an account.
+            :id: The ID of an account.
+            :name: The ``Name`` field associated with an account.
+        :kwarg as_dict: Normally, lookups return the content of a single
+            field.  When this argument is true, the lookup returns a
+            dictionary mapping field names to fields.
+        :kwarg pairs: When :kwarg as_dict: is true, returns all fields as a
+            list of hashes containing the entries ``key`` and ``value``,
+            much like the ``with_dict`` loop type.
+        :kwarg sync: Options are:
+            :auto:
+            :now:
+            :no:
+            However, no validation is performed.
+        :raises AnsibleError: if ``all`` is given for :kwarg field:.  Users
+            should instead use the ``as_dict`` option.
+        :raises AnsibleError: if the user specified neither a value for
+            :kwarg field: nor :kwarg as_dict:.
+        :raises AnsibleError: if no data could be retrieved from LastPass. The
+            typical reason is that the provided query matches no accounts.
+        :raises AnsibleError: if the provided query matches more than one
+            account.
+
+        :returns: either the content of a single field, a dictionary mapping
+            field names to values if :kwarg as_dict: is true, or a list of
+            dictionaries if :kwarg as_dict: and :kwarg pairs: are both true.
+        '''
+
         basic_regexp    = kwargs.get('basic_regexp', False)
+        fixed_strings   = kwargs.get('fixed_strings', False)
         expand_multi    = kwargs.get('expand_multi', False)
         field           = kwargs.get('field', None)
-        fixed_string    = kwargs.get('fixed_string', False)
-        pairs           = kwargs.get('merged', False)
+        as_dict         = kwargs.get('as_dict', False)
+        pairs           = kwargs.get('pairs', False)
         sync            = kwargs.get('sync', None)
 
         local_args = []
@@ -77,6 +125,7 @@ class LastPass(object):
         if sync is not None:
             local_args.append('--sync={0}'.format(sync))
 
+        # TODO this breaks multiple-match-detection logic
         if expand_multi:
             local_args.append('--expand-multi')
 
@@ -95,7 +144,7 @@ class LastPass(object):
 
         if basic_regexp:
             local_args.append('--basic-regexp')
-        elif fixed_string:
+        elif fixed_strings:
             local_args.append('--fixed-strings')
 
         local_args.append(target)
@@ -111,12 +160,13 @@ class LastPass(object):
         if firstline.startswith('Multiple matches'):
             raise AnsibleError('lastpass found multiple matches for {0}'.format(target))
         elif as_dict:
-            parsed = yaml.safe_load(stdout_io)
+            parsed = self.load_data(stdout_io)
 
             if pairs:
+                print("USING PAIRS!")
                 ret = [dict(key=k.lower(), value=v) for k, v in parsed.iteritems()]
             else:
-                ret = {k.lower(): v for k, v in parsed.iteritems()}
+                ret = dict([(k.lower(), v) for k, v in parsed.iteritems()])
         else:
             ret = firstline.rstrip()
 
@@ -124,6 +174,16 @@ class LastPass(object):
 
         return ret
 
+    def load_data(self, stream):
+        ''' This is a cheap hack until lpass implements output formatting.
+            See https://github.com/lastpass/lastpass-cli/issues/192 for
+            progress.
+        '''
+        def format_line(line):
+            (k, v) = line.rstrip().split(':', 1)
+            return (k, v.strip())
+
+        return dict(map(format_line, stream.readlines()))
 
 class LookupModule(LookupBase):
 
