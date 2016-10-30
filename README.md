@@ -1,38 +1,179 @@
-Role Name
-=========
+# Ansible Lookup Plugin - Lastpass
 
-A brief description of the role goes here.
+Perform lookups on the entries in your LastPass account.
 
-Requirements
-------------
+## Requirements
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+The LastPass [`lpass`
+utility](https://lastpass.github.io/lastpass-cli/lpass.1.html) must be
+installed on the control machine.
 
-Role Variables
---------------
+## Usage
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+### Setup
 
-Dependencies
-------------
+In order to perform lookups with this plugin, you *must* have already logged in
+to LastPass using `lpass login`.  This plugin will raise an error if it detects
+that you are not currently logged in.
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+### Options
 
-Example Playbook
-----------------
+- `target`: A :class:`str` to use as the basis of the lookup.
+    Whether this field represents a LastPass ID, or the login name,
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+- `basic_regexp`: When true, indicates that the string to match against is a
+  regular expression.
+- `fixed_strings`: When true, indicates that the string to match against is a
+  fixed string.  Lookups will be case-sensitive.
+- `expand_multi`: If multiple accounts match the provided string/regular
+  expression, expand the result set for all of them.
+- `field`: Which field to retrieve.  Any field associated with
+  an account is valid here, so if you have created a custom field for
+  an account you may specify it here.  Beware: field names other
+  than built-in options (i.e., those that correspond to CLI flags
+  like `--password`) are case-sensitive.  Built-in choices are:
+    - `username`:  The `Username` field associated with an account.
+    - `password`:  The `Password` field associated with an account.
+    - `url`:  The `URL` field associated with an account.
+    - `notes`:  The `notes` field associated with an account.
+    - `id`:  The ID of an account.
+    - `name`:  The `Name` field associated with an account.
+- `as_dict`: Normally, lookups return the content of a single field.  When this
+  argument is true, the lookup returns a dictionary mapping field names to
+  fields.
+- `pairs`: When `as_dict`: is true, returns all fields as a list of hashes
+  containing the entries `key` and `value`, much like the `with_dict`
+  loop type.
+- `sync`: Synchronize with LastPass' servers.  Options are `auto`, `now`, and
+  `no`.
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+## Examples
 
-License
--------
+```yaml
+# Look up up the password associated with your http://foo.com account:
+- debug: msg='{{ lookup("lastpass", "http://foo.com", field="password") }}'
+```
 
-BSD
+```
+ok: [localhost] => {
+    "msg": "5053CR37"
+}
+```
 
-Author Information
-------------------
+```yaml
+# Look up up the username associated with your foo.com account:
+- debug: msg='{{ lookup("lastpass", "http://foo.com", field="username") }}'
+```
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+```
+ok: [localhost] => {
+    "msg": "me"
+}
+```
+
+```yaml
+# Look up up the URL associated with your foo.com account:
+- debug: msg='{{ lookup("lastpass", "http://foo.com", field="url") }}'
+```
+
+```
+ok: [localhost] => {
+    "msg": {
+        "password": "5053CR37",
+        "url": "http://foo.com",
+        "username": "me"
+    }
+}
+```
+
+```yaml
+# Look up all fields associated with your foo.com account and return them as a
+# hash:
+- debug: msg='{{ lookup("lastpass", "http://foo.com", as_dict=True) }}'
+```
+
+```
+ok: [localhost] => {
+    "msg": [
+        {
+            "key": "username",
+            "value": "me"
+        },
+        {
+            "key": "url",
+            "value": "http://foo.com"
+        },
+        {
+            "key": "password",
+            "value": "5053CR37"
+        }
+    ]
+}
+```
+
+## Caveats
+
+At present, the `lpass show` command that underpins this plugin cannot be
+configured to display results in standard serialization format like JSON or
+YAML.  Instead, it uses an ad-hoc style of one `key: value` pair per line.
+It would be possible to load this as YAML, except that keys and values aren't
+quoted, so parsing breaks if any YAML metacharacters appear in either.
+
+For now, this plugin employs a simplistic parser that just splits each line on
+the first colon encountered, stripping any leading and trailing whitespace from
+the righthand field.  The plugin is therefore unable to handle fields with
+colons in their name or surrounding spaces in their value.  For instance:
+
+```yaml
+# Given "my: custom: field:"="Hello!"
+- debug: '{{ lookup("lastpass", "http://contrived-example.org", as_dict=True, pairs=True) }}'
+```
+
+```
+ok: [localhost] => {
+    "msg": [
+        {
+            "key": "url",
+            "value": "http://contrived-example.org"
+        },
+        {
+            "key": "my",
+            "value": "custom: field: Hello!"
+        },
+    ]
+}
+```
+
+```yaml
+# Given "notes"="    I just need some space    "
+- debug: '{{ lookup("lastpass", "http://contrived-example.org", as_dict=True, pairs=True) }}'
+```
+
+```
+ok: [localhost] => {
+    "msg": [
+        {
+            "key": "url",
+            "value": "http://contrived-example.org"
+        },
+        {
+            "key": "notes",
+            "value": "I just need some space"
+        },
+    ]
+}
+```
+
+Work is currently underway at the [`lastpass-cli`
+repo](https://github.com/lastpass/lastpass-cli) to [add support for
+output
+formatting](https://github.com/lastpass/lastpass-cli/tree/topic-user-format-strings).
+A future version of this plugin will incorporate use of this feature.
+
+## License
+
+GPLv3
+
+## Author Information
+
+Matt Schreiber <mschreiber@gmail.com>
